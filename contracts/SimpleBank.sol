@@ -1,90 +1,126 @@
 /*
-
-The public version of the file used for testing can be found here: https://gist.github.com/ConsenSys-Academy/ce47850a8e2cba6ef366625b665c7fba
-
-This test file has been updated for Truffle version 5.0. If your tests are failing, make sure that you are
-using Truffle version 5.0. You can check this by running "trufffle version"  in the terminal. If version 5 is not
-installed, you can uninstall the existing version with `npm uninstall -g truffle` and install the latest version (5.0)
-with `npm install -g truffle`.
-
+    This exercise has been updated to use Solidity version 0.5
+    Breaking changes from 0.4 to 0.5 can be found here:
+    https://solidity.readthedocs.io/en/v0.5.0/050-breaking-changes.html
 */
-let catchRevert = require("./exceptionsHelpers.js").catchRevert
-var SimpleBank = artifacts.require("./SimpleBank.sol")
 
-contract('SimpleBank', function(accounts) {
+pragma solidity ^0.5.0;
 
-  const owner = accounts[0]
-  const alice = accounts[1]
-  const bob = accounts[2]
-  const deposit = web3.utils.toBN(2)
+contract SimpleBank {
 
-  beforeEach(async () => {
-    instance = await SimpleBank.new()
-  })
+    //
+    // State variables
+    //
 
-  it("should mark addresses as enrolled", async () => {
-    await instance.enroll({from: alice})
+    /* Fill in the keyword. Hint: We want to protect our users balance from other contracts*/
+    mapping (address => uint) private balances;
 
-    const aliceEnrolled = await instance.enrolled(alice, {from: alice})
-    assert.equal(aliceEnrolled, true, 'enroll balance is incorrect, check balance method or constructor')
-  });
+    /* Fill in the keyword. We want to create a getter function and allow contracts to be able to see if a user is enrolled.  */
+    mapping (address => bool) public enrolled;
 
-  it("should not mark unenrolled users as enrolled", async() =>{
-    const ownerEnrolled = await instance.enrolled(owner, {from: owner})
-    assert.equal(ownerEnrolled, false, 'only enrolled users should be marked enrolled')
-  })
+    /* Let's make sure everyone knows who owns the bank. Use the appropriate keyword for this*/
+    address payable public owner;
 
-  it("should deposit correct amount", async () => {
-    await instance.enroll({from: alice})
-    await instance.deposit({from: alice, value: deposit})
-    const balance = await instance.getBalance({from: alice})
+    //
+    // Events - publicize actions to external listeners
+    //
 
-    assert.equal(deposit.toString(), balance, 'deposit amount incorrect, check deposit method')
-  })
+    /* Add an argument for this event, an accountAddress */
+    event LogEnrolled(address indexed accountAddress);
 
-  it("should log a deposit event when a deposit is made", async() => {
-    await instance.enroll({from: alice})
-    const result  = await instance.deposit({from: alice, value: deposit})
-    
-    const expectedEventResult = {accountAddress: alice, amount: deposit}
+    /* Add 2 arguments for this event, an accountAddress and an amount */
+    event LogDepositMade(address indexed accountAddress, uint amount);
 
-    const logAccountAddress = result.logs[0].args.accountAddress
-    const logDepositAmount = result.logs[0].args.amount.toNumber()
+    /* Create an event called LogWithdrawal */
+    /* Add 3 arguments for this event, an accountAddress, withdrawAmount and a newBalance */
+    event LogWithdrawal(address indexed accountAddress, uint withdrawAmount, uint newBalance);
 
-    assert.equal(expectedEventResult.accountAddress, logAccountAddress, "LogDepositMade event accountAddress property not emitted, check deposit method");
-    assert.equal(expectedEventResult.amount, logDepositAmount, "LogDepositMade event amount property not emitted, check deposit method")
-  })
+    //
+    // Functions
+    //
 
-  it("should withdraw correct amount", async () => {
-    const initialAmount = 0
-    await instance.enroll({from: alice})
-    await instance.deposit({from: alice, value: deposit})
-    await instance.withdraw(deposit, {from: alice})
-    const balance = await instance.getBalance({from: alice})
+    /* Use the appropriate global variable to get the sender of the transaction */
+    constructor() public payable {
+        /* Set the owner to the creator of this contract */
+        owner = address(this);
+    }
 
-    assert.equal(balance.toString(), initialAmount.toString(), 'balance incorrect after withdrawal, check withdraw method')
-  })
+    // Fallback function - Called if other functions don't match call or
+    // sent ether without data
+    // Typically, called when invalid data is sent
+    // Added so ether sent to this contract is reverted if the contract fails
+    // otherwise, the sender's money is transferred to contract
+    function() external payable {
+        revert();
+    }
 
-  it("should not be able to withdraw more than has been deposited", async() => {
-    await instance.enroll({from: alice})
-    await instance.deposit({from: alice, value: deposit})
-    await catchRevert(instance.withdraw(deposit + 1, {from: alice}))
-  })
+    /// @notice Get balance
+    /// @return The balance of the user
+    // A SPECIAL KEYWORD prevents function from editing state variables;
+    // allows function to run locally/off blockchain
+    function getBalance() public view returns (uint) {
+        /* Get the balance of the sender of this transaction */
+        return balances[msg.sender];
+    }
 
-  it("should emit the appropriate event when a withdrawal is made", async()=>{
-    const initialAmount = 0
-    await instance.enroll({from: alice})
-    await instance.deposit({from: alice, value: deposit})
-    var result = await instance.withdraw(deposit, {from: alice})
+    /// @notice Enroll a customer with the bank
+    /// @return The users enrolled status
+    // Emit the appropriate event
+    function enroll() public returns (bool){
 
-    const accountAddress = result.logs[0].args.accountAddress
-    const newBalance = result.logs[0].args.newBalance.toNumber()
-    const withdrawAmount = result.logs[0].args.withdrawAmount.toNumber()
+        if(!enrolled[msg.sender]) {
 
-    const expectedEventResult = {accountAddress: alice, newBalance: initialAmount, withdrawAmount: deposit}
+            enrolled[msg.sender] = true;
 
-    assert.equal(expectedEventResult.accountAddress, accountAddress, "LogWithdrawal event accountAddress property not emitted, check deposit method")
-    assert.equal(expectedEventResult.newBalance, newBalance, "LogWithdrawal event newBalance property not emitted, check deposit method")
-    assert.equal(expectedEventResult.withdrawAmount, withdrawAmount, "LogWithdrawal event withdrawalAmount property not emitted, check deposit method")
-  })
-})
+            emit LogEnrolled(msg.sender);
+            return true;
+        }
+        return false;
+
+
+    }
+
+    /// @notice Deposit ether into bank
+    /// @return The balance of the user after the deposit is made
+    // Add the appropriate keyword so that this function can receive ether
+    // Use the appropriate global variables to get the transaction sender and value
+    // Emit the appropriate event
+    // Users should be enrolled before they can make deposits
+    function deposit() public payable returns (uint) {
+        /* Add the amount to the user's balance, call the event associated with a deposit,
+          then return the balance of the user */
+
+
+        require(enrolled[msg.sender], "Should be enrolled");
+
+        balances[msg.sender] += msg.value;
+
+        emit LogDepositMade(msg.sender, msg.value);
+
+        return balances[msg.sender];
+
+    }
+
+    /// @notice Withdraw ether from bank
+    /// @dev This does not return any excess ether sent to it
+    /// @param withdrawAmount amount you want to withdraw
+    /// @return The balance remaining for the user
+    // Emit the appropriate event
+    function withdraw(uint withdrawAmount) public payable returns (uint) {
+        /* If the sender's balance is at least the amount they want to withdraw,
+           Subtract the amount from the sender's balance, and try to send that amount of ether
+           to the user attempting to withdraw.
+           return the user's balance.*/
+
+        require(balances[msg.sender] >= withdrawAmount, "Low balance");
+
+        balances[msg.sender] -= withdrawAmount;
+
+        msg.sender.transfer(withdrawAmount);
+
+        emit LogWithdrawal(msg.sender, withdrawAmount, balances[msg.sender]);
+
+        return balances[msg.sender];
+    }
+
+}
